@@ -1,0 +1,70 @@
+FROM ubuntu:22.04
+
+LABEL maintainer="Andrey Antukh <niwi@niwi.nz>"
+ENV LANG='en_US.UTF-8' \
+    LC_ALL='en_US.UTF-8' \
+    JAVA_HOME="/opt/jdk" \
+    PATH=/opt/jdk/bin:$PATH \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC
+
+RUN set -ex; \
+    useradd -U -M -u 1001 -s /bin/false -d /opt/penpot penpot; \
+    apt-get -qq update; \
+    apt-get -qq upgrade; \
+    apt-get -qqy --no-install-recommends install \
+        nano \
+        curl \
+        tzdata \
+        locales \
+        ca-certificates \
+        imagemagick \
+        webp \
+        rlwrap \
+        fontconfig \
+        woff-tools \
+        woff2 \
+        python3 \
+        fontforge \
+    ; \
+    echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen; \
+    locale-gen; \
+    mkdir -p /opt/data/assets; \
+    mkdir -p /opt/penpot; \
+    chown -R penpot:penpot /opt/penpot; \
+    chown -R penpot:penpot /opt/data; \
+    rm -rf /var/lib/apt/lists/*;
+
+RUN set -eux; \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "${ARCH}" in \
+       aarch64|arm64) \
+         ESUM='262be608e266fd76d7496af83b2832be853c3aaf7460d6a4da198cd40db74553'; \
+         BINARY_URL='https://github.com/adoptium/temurin18-binaries/releases/download/jdk-18.0.2.1%2B1/OpenJDK18U-jdk_aarch64_linux_hotspot_18.0.2.1_1.tar.gz'; \
+         ;; \
+       armhf|armv7l) \
+         ESUM='4cd49b92d13847bfad7b3bf635cca349e2c89c7641748c5288bc40d612cdbbd6'; \
+         BINARY_URL='https://github.com/adoptium/temurin18-binaries/releases/download/jdk-18.0.2.1%2B1/OpenJDK18U-jdk_arm_linux_hotspot_18.0.2.1_1.tar.gz'; \
+         ;; \
+       amd64|x86_64) \
+         ESUM='7d6beba8cfc0a8347f278f7414351191a95a707d46b6586e9a786f2669af0f8b'; \
+         BINARY_URL='https://github.com/adoptium/temurin18-binaries/releases/download/jdk-18.0.2.1%2B1/OpenJDK18U-jdk_x64_linux_hotspot_18.0.2.1_1.tar.gz'; \
+         ;; \
+       *) \
+         echo "Unsupported arch: ${ARCH}"; \
+         exit 1; \
+         ;; \
+    esac; \
+    curl -LfsSo /tmp/openjdk.tar.gz ${BINARY_URL}; \
+    echo "${ESUM} */tmp/openjdk.tar.gz" | sha256sum -c -; \
+    mkdir -p /opt/jdk; \
+    cd /opt/jdk; \
+    tar -xf /tmp/openjdk.tar.gz --strip-components=1; \
+    rm -rf /tmp/openjdk.tar.gz;
+
+
+COPY --chown=penpot:penpot ./bundle-backend/ /opt/penpot/backend/
+
+USER penpot:penpot
+WORKDIR /opt/penpot/backend
+CMD ["/bin/bash", "run.sh"]
